@@ -7,7 +7,7 @@ import requests
 from flask import Flask, jsonify, request
 
 # Minimum allowed transaction amount (INR) for any UPI transaction – as per latest policy the minimum value for **all** UPI transactions is 70 ₹
-MIN_TRANSACTION_AMOUNT = 1.0
+MIN_TRANSACTION_AMOUNT = 5.0
 
 from db import get_account_by_vpa, init_db, seed_sample_accounts
 
