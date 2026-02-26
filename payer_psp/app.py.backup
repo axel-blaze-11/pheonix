@@ -169,7 +169,7 @@ def reqpay() -> tuple[Response | dict, int]:
         # New validation: block payments to Payees with code 1111 (demo restriction)
         if payee_code == "1111":
             logger.info(f"[payer_psp] Blocked payment to Payee.code=1111 for demo purposes")
-            return jsonify(error="PAYEE_BLOCKED", details="Code Blocked for Demo"), 400
+            return jsonify(error="FAIL", details="Code Blocked for Demo"), 400
         
         # Forward the ORIGINAL XML to preserve all attributes exactly as received
         # Don't re-serialize as that can lose namespace prefixes and attribute ordering

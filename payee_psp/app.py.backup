@@ -189,6 +189,12 @@ def reqvaladd() -> tuple[Response | dict, int]:
         finally:
             session.close()
 
+    # New validation rule: block payees with code == "1111"
+    if profile and getattr(profile, "code", None) == "1111":
+        logger.info("[payee_psp] Payee code 1111 blocked; rejecting.")
+        body = _build_resp_valadd(head, txn, profile, result="FAILURE", fail_msg="Code Blocked for Demo")
+        return Response(body, status=200, mimetype="application/xml")
+
     # Validation: minimum transaction amount must be >= 70 Rs
     amount_str = txn.get("amount")
     if amount_str:

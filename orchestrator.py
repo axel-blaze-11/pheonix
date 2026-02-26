@@ -359,7 +359,7 @@ def deploy_change_proxy():
         resp = requests.post(
             f"{npci_url}/api/agent/create-manifest",
             json=data,
-            timeout=30  # Increased timeout for LLM processing
+            timeout=300  # Increased timeout for LLM processing and PR creation
         )
         
         if resp.status_code == 200:

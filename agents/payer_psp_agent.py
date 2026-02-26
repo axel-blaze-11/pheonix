@@ -45,40 +45,56 @@ class PayerPSPAgent(BaseAgent):
             code_changes = self._interpret_manifest(manifest)
             self.update_status(manifest.change_id, AgentStatus.RECEIVED, f"Identified {len(code_changes)} dependent files to update")
 
+            import os
+            github_token = os.environ.get("GITHUB_TOKEN")
+            
+            # Apply code changes locally without committing
             applied_changes = []
-            services_to_restart = set()
+            changed_files = []
             for change in code_changes:
                 file_path = change.get("file_path", "")
                 change_details = change.get("changes", {})
-
+                
                 self.update_status(manifest.change_id, AgentStatus.APPLIED, f"Applying changes to {file_path}...")
-
-                success, message, diff = self.code_updater.update_file(file_path, change_details, manifest.change_id)
+                
+                success, message, diff = self.code_updater.update_file(file_path, change_details, manifest.change_id, auto_commit=False)
                 if success:
                     applied_changes.append({
                         "file": file_path,
-                        "status": "APPLIED",
-                        "diff": diff[:500] if diff else None,
+                        "status": "MODIFIED",
+                        "diff": diff[:500] if diff else None,  # Keep in summary
                     })
+                    changed_files.append(file_path)
+                    # Send detailed log with diff
                     self.update_status(manifest.change_id, AgentStatus.APPLIED, {
                         "message": f"Successfully updated {file_path}",
                         "file": file_path,
                         "diff": diff
                     })
-                    service = self.docker_manager.get_service_for_file(file_path)
-                    if service:
-                        services_to_restart.add(service)
                 else:
                     self.update_status(manifest.change_id, AgentStatus.ERROR, f"Failed to update {file_path}: {message}")
-
-            if services_to_restart:
-                self.update_status(manifest.change_id, AgentStatus.APPLIED, f"Restarting Docker services: {', '.join(services_to_restart)}...")
-                for service in services_to_restart:
-                    restart_success = self.docker_manager.restart_service(service)
-                    if restart_success:
-                        self.update_status(manifest.change_id, AgentStatus.APPLIED, f"Successfully restarted {service}")
-                    else:
-                        self.update_status(manifest.change_id, AgentStatus.ERROR, f"Failed to restart {service}")
+            
+            # Create a PR with all grouped changes
+            if changed_files and github_token:
+                self.update_status(manifest.change_id, AgentStatus.APPLIED, f"Creating Pull Request for {len(changed_files)} files...")
+                branch_name = f"update/{self.agent_id.lower()}/{manifest.change_id[:8]}"
+                pr_message = f"[{self.agent_name}] Apply changes for Manifest {manifest.change_id}"
+                
+                pr_url = self.code_updater.create_pr_for_changes(
+                    file_paths=changed_files,
+                    branch_name=branch_name,
+                    message=pr_message,
+                    github_token=github_token
+                )
+                
+                if pr_url:
+                    self.update_status(manifest.change_id, AgentStatus.APPLIED, f"Pull Request opened: {pr_url}")
+                else:
+                    self.update_status(manifest.change_id, AgentStatus.ERROR, "Failed to create Pull Request.")
+                
+                self.update_status(manifest.change_id, AgentStatus.RECEIVED, "Code changes deployed to PR. Awaiting manual merge.")
+            elif changed_files and not github_token:
+                self.update_status(manifest.change_id, AgentStatus.ERROR, "GITHUB_TOKEN not found. Could not create Pull Request.")
 
             self.update_status(manifest.change_id, AgentStatus.TESTED, "Running verification tests...")
             import time

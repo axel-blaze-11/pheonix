@@ -80,7 +80,8 @@ class CodeUpdater:
         self,
         file_path: str,
         changes: Dict[str, Any],
-        manifest_id: Optional[str] = None
+        manifest_id: Optional[str] = None,
+        auto_commit: bool = True
     ) -> Tuple[bool, str, Optional[str]]:
         """
         Update a file based on change instructions with robust visibility.
@@ -128,12 +129,13 @@ class CodeUpdater:
                 if diff:
                     print(f">>> [CodeUpdater] Generated Diff:\n{diff}")
                 
-                # Commit to git
-                commit_msg = f"Update {file_path}"
-                if manifest_id:
-                    commit_msg += f" (Manifest: {manifest_id})"
-                
-                self._git_commit(file_path, commit_msg)
+                # Commit to git if auto_commit is True
+                if auto_commit:
+                    commit_msg = f"Update {file_path}"
+                    if manifest_id:
+                        commit_msg += f" (Manifest: {manifest_id})"
+                    
+                    self._git_commit(file_path, commit_msg)
                 
                 self.changes_log.append({
                     "file": file_path,
@@ -427,3 +429,87 @@ class CodeUpdater:
     def get_changes_log(self) -> List[Dict[str, Any]]:
         """Get log of all changes made."""
         return self.changes_log
+
+    def create_pr_for_changes(
+        self, 
+        file_paths: List[str], 
+        branch_name: str, 
+        message: str, 
+        github_token: str,
+        base_branch: str = "main"
+    ) -> Optional[str]:
+        """Create a new branch, commit changes, push, open a PR via GitHub API, then revert local."""
+        if not file_paths:
+            return None
+            
+        import subprocess
+        import requests
+        import re
+        
+        pr_url = None
+        try:
+            # 1. Create and checkout new branch (keeps local modifications)
+            subprocess.run(["git", "checkout", "-b", branch_name], cwd=str(self.base_path), check=True)
+            
+            # 2. Add modified files
+            for fp in file_paths:
+                subprocess.run(["git", "add", fp], cwd=str(self.base_path), check=True)
+                
+            # 3. Commit
+            subprocess.run(["git", "commit", "-m", message], cwd=str(self.base_path), check=True)
+            
+            # 4. Push branch
+            remote_url = subprocess.run(["git", "config", "--get", "remote.origin.url"], cwd=str(self.base_path), capture_output=True, text=True).stdout.strip()
+            
+            push_url = remote_url
+            if push_url.startswith("https://") and github_token:
+                push_url = push_url.replace("https://", f"https://oauth2:{github_token}@")
+                
+            print(f">>> [CodeUpdater] Pushing branch {branch_name} to remote...")
+            subprocess.run(["git", "push", "-u", push_url, branch_name], cwd=str(self.base_path), check=True)
+            
+            # 5. Extract owner and repo for PR
+            repo_owner, repo_name = "axel-blaze-11", "pheonix"
+            match = re.search(r'github\.com/([^/]+)/([^/.]+)', remote_url)
+            if match:
+                repo_owner = match.group(1)
+                repo_name = match.group(2)
+                
+            # 6. Create PR via GitHub API
+            print(f">>> [CodeUpdater] Opening PR via GitHub API...")
+            api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
+            headers = {
+                "Authorization": f"token {github_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            data = {
+                "title": message,
+                "head": branch_name,
+                "base": base_branch,
+                "body": f"Automated PR created by agent.\n\nFiles changed:\n" + "\n".join([f"- `{fp}`" for fp in file_paths])
+            }
+            
+            resp = requests.post(api_url, headers=headers, json=data)
+            if resp.status_code == 201:
+                pr_url = resp.json().get('html_url')
+                logger.info(f"Successfully created PR: {pr_url}")
+                print(f">>> [CodeUpdater] Successfully created PR: {pr_url}")
+            else:
+                logger.error(f"Failed to create PR: {resp.text}")
+                print(f">>> [CodeUpdater] Failed to create PR: {resp.text}")
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Git command failed during PR creation: {e}")
+            print(f">>> [CodeUpdater] Git error during PR creation: {e}")
+        except Exception as e:
+            logger.error(f"Exception during PR creation: {e}")
+            print(f">>> [CodeUpdater] Exception during PR creation: {e}")
+        finally:
+            # 7. Revert back to main so local run isn't affected
+            try:
+                subprocess.run(["git", "checkout", base_branch], cwd=str(self.base_path), check=True)
+                print(f">>> [CodeUpdater] Reverted to {base_branch} branch locally.")
+            except Exception as e:
+                logger.error(f"Failed to checkout main after PR: {e}")
+                
+        return pr_url
