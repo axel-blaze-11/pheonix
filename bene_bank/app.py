@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 import requests
 from flask import Flask, jsonify, request
 
-# Minimum allowed transaction amount (INR) for any UPI transaction – as per latest policy the minimum value for **all** UPI transactions is 70 ₹
-MIN_TRANSACTION_AMOUNT = 70.0
+# Minimum allowed transaction amount (INR) for any UPI transaction – updated per manifest to 1 ₹
+MIN_TRANSACTION_AMOUNT = 1.0
 
 from db import get_account_by_vpa, init_db, seed_sample_accounts
 
@@ -95,10 +95,7 @@ def _parse_reqpay_credit(body: bytes) -> dict | None:
         if not msg_id:
             return None
         amount = float(amt.get("value") or 0) if amt is not None else 0.0
-        # Validation: Minimum transaction amount of INR 1 (per manifest 73b751d3-078b-4e2c-a331-5a01ec5c6755)
-        if amount < 1.0:
-            return None  # Reject transactions below minimum amount
-        # Validation: Minimum transaction amount of INR 70 (per new policy)
+        # Validation: Minimum transaction amount as defined by MIN_TRANSACTION_AMOUNT
         if amount < MIN_TRANSACTION_AMOUNT:
             return None  # Reject transactions below minimum amount
         
@@ -212,7 +209,7 @@ def reqpay() -> tuple[dict, int]:
             err_code = "PAYEE_NOT_FOUND"
         elif amount < MIN_TRANSACTION_AMOUNT:
             result = "FAILURE"
-            err_code = "MIN_AMOUNT_NOT_MET"  # Transaction amount below the mandated 70 ₹ minimum
+            err_code = "MIN_AMOUNT_NOT_MET"  # Transaction amount below the mandated 1 ₹ minimum
         else:
             account.balance += amount
             session.commit()
