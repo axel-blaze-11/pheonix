@@ -130,10 +130,10 @@ def reqpay() -> tuple[Response | dict, int]:
         if amt_el is None:
             return jsonify(error="Invalid ReqPay: missing Amount element"), 400
         amount = float(amt_el.get("value") or 0)
-        # Minimum transaction amount validation (1 rs)
-        if amount < 1.0:
+        # Minimum transaction amount validation (5 rs)
+        if amount < 5.0:
             logger.info(f"[payer_psp] Validation failed: Amount {amount} below minimum for {payer_vpa}")
-            return jsonify(error="INVALID_AMOUNT", details="Transaction amount must be at least 1 rs"), 400
+            return jsonify(error="INVALID_AMOUNT", details="Transaction amount must be at least 5 rs"), 400
         
         # Extract PIN from Creds
         provided_pin = None
