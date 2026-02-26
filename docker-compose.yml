@@ -1,0 +1,184 @@
+services:
+  bene_bank:
+    build:
+      context: .
+      dockerfile: bene_bank/Dockerfile
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - FLASK_DEBUG=0
+      - PORT=5001
+      - NPCI_URL=http://npci:5002
+      - ORCHESTRATOR_URL=http://host.docker.internal:9991
+      - PYTHONPATH=/app:/app/bene_bank
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${BENE_BANK_PORT:-5090}:5001"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python3 bene_bank/app.py
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  npci:
+    build:
+      context: .
+      dockerfile: npci/Dockerfile
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - FLASK_DEBUG=0
+      - PORT=5002
+      - PAYEE_PSP_URL=http://payee_psp:5003
+      - REM_BANK_URL=http://rem_bank:5005
+      - BENE_BANK_URL=http://bene_bank:5001
+      - PAYER_PSP_URL=http://payer_psp:5004
+      - ORCHESTRATOR_URL=http://host.docker.internal:9991
+      - PYTHONPATH=/app:/app/npci
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${NPCI_PORT:-5050}:5002"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python3 npci/app.py
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  payee_psp:
+    build:
+      context: .
+      dockerfile: payee_psp/Dockerfile
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - FLASK_DEBUG=0
+      - PORT=5003
+      - ORCHESTRATOR_URL=http://host.docker.internal:9991
+      - PYTHONPATH=/app:/app/payee_psp
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${PAYEE_PSP_PORT:-5070}:5003"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python3 payee_psp/app.py
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  payer_psp:
+    build:
+      context: .
+      dockerfile: payer_psp/Dockerfile
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - FLASK_DEBUG=0
+      - PORT=5004
+      - NPCI_URL=http://npci:5002
+      - ORCHESTRATOR_URL=http://host.docker.internal:9991
+      - PYTHONPATH=/app:/app/payer_psp
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${PAYER_PSP_PORT:-5060}:5004"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python3 payer_psp/app.py
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rem_bank:
+    build:
+      context: .
+      dockerfile: rem_bank/Dockerfile
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - FLASK_DEBUG=0
+      - PORT=5005
+      - NPCI_URL=http://npci:5002
+      - ORCHESTRATOR_URL=http://host.docker.internal:9991
+      - PYTHONPATH=/app:/app/rem_bank
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${REM_BANK_PORT:-5080}:5005"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python3 rem_bank/app.py
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - FLASK_DEBUG=0
+      - ORCHESTRATOR_PORT=6000
+      - NPCI_URL=http://npci:5002
+    volumes:
+      - .:/app
+    ports:
+      - "${ORCHESTRATOR_PORT:-9991}:6000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  payment_ui:
+    build:
+      context: .
+      dockerfile: payment_ui/Dockerfile
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=development
+      - FLASK_DEBUG=0
+      - PAYMENT_UI_PORT=9992
+      - PAYER_PSP_URL=http://payer_psp:5004
+    ports:
+      - "${PAYMENT_UI_PORT:-9992}:9992"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
