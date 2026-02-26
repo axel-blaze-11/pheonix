@@ -283,6 +283,66 @@ def get_change_status(change_id: str):
         return jsonify(status), 200
     return jsonify(error="Change not found"), 404
 
+import re
+@app.route("/api/orchestrator/changes/<change_id>/pr_status", methods=["GET"])
+def get_pr_status(change_id: str):
+    """Get GitHub merge status of PRs associated with a change."""
+    status = orchestrator.get_change_status(change_id)
+    if not status:
+        return jsonify(error="Change not found"), 404
+        
+    github_token = os.environ.get("GITHUB_TOKEN")
+    if not github_token:
+        # Cannot check PR status without token, but can still return URLs if found
+        logger.warning("GITHUB_TOKEN not found, skipping PR merge check")
+        
+    pr_statuses = {}
+    
+    # Extract PR URLs from logs
+    details = status.get("details", {})
+    for agent_id, agent_details in details.items():
+        logs = agent_details.get("logs", [])
+        for log in logs:
+            message = log.get("message", "")
+            # Look for "Pull Request opened: <url>"
+            match = re.search(r'Pull Request opened:\s*(https://github\.com/[^\s]+)', message)
+            if match:
+                pr_url = match.group(1)
+                
+                # Default status
+                pr_status = {
+                    "url": pr_url,
+                    "merged": False,
+                    "state": "unknown"
+                }
+
+                if github_token:
+                    # Parse PR URL: https://github.com/owner/repo/pull/123
+                    url_parts = pr_url.split('/')
+                    if len(url_parts) >= 7 and "pull" in url_parts:
+                        owner = url_parts[3]
+                        repo = url_parts[4]
+                        pr_num = url_parts[6]
+                        
+                        api_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_num}"
+                        headers = {
+                            "Authorization": f"token {github_token}",
+                            "Accept": "application/vnd.github.v3+json"
+                        }
+                        try:
+                            resp = requests.get(api_url, headers=headers, timeout=5)
+                            if resp.status_code == 200:
+                                pr_data = resp.json()
+                                pr_status["merged"] = pr_data.get("merged", False)
+                                pr_status["state"] = pr_data.get("state", "unknown")
+                        except Exception as e:
+                            logger.error(f"Error checking PR {pr_url}: {e}")
+                
+                pr_statuses[agent_id] = pr_status
+                break # Only need the first PR URL found for this agent
+                
+    return jsonify({"change_id": change_id, "prs": pr_statuses}), 200
+
 
 @app.route("/api/orchestrator/changes", methods=["GET"])
 def get_all_changes():

@@ -174,9 +174,21 @@ def create_manifest():
             test_requirements=data.get("test_requirements"),
         )
         
-        # Optionally dispatch immediately
-        if data.get("dispatch", False):
-            receivers = data.get("receivers")
+        import threading
+        def process_npci():
+            try:
+                # Need to give orchestrator a tiny moment to register the change first
+                import time
+                time.sleep(1)
+                agent.process_manifest(manifest)
+            except Exception as e:
+                logger.error(f"Error in NPCI self-processing: {e}")
+                
+        threading.Thread(target=process_npci).start()
+
+        # Optionally dispatch immediately or if receivers are explicitly provided
+        if data.get("dispatch", False) or data.get("receivers"):
+            receivers = data.get("receivers", [])
             results = agent.dispatch_manifest(manifest, receivers)
             return jsonify({
                 "manifest": manifest.to_dict(),

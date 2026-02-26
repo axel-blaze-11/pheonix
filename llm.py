@@ -12,6 +12,7 @@ try:
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
+    BaseMessage = object  # Add a dummy BaseMessage to avoid NameError in type hints
     warnings.warn("langchain packages not available. LLM features will be limited.")
 
 

@@ -164,6 +164,29 @@ async function fetchChanges() {
             const date = new Date(change.created_at).toLocaleTimeString();
             const manifest = change.manifest || {};
 
+            // PR statuses
+            const changeId = manifest.change_id;
+            const prs = window.prStatuses && window.prStatuses[changeId] ? window.prStatuses[changeId] : {};
+            let prStatusHtml = '';
+
+            if (Object.keys(prs).length > 0) {
+                const allMerged = Object.values(prs).every(pr => pr.merged);
+                const prBadges = Object.entries(prs).map(([agent, pr]) => {
+                    const cleanName = agent.replace('_AGENT', '').replace('_', ' ');
+                    const badgeClass = pr.merged ? 'status-ready' : 'status-tested';
+                    const statusText = pr.merged ? 'Merged' : 'Pending';
+                    return `<a href="${pr.url}" target="_blank" class="status-pill ${badgeClass}" style="text-decoration:none; margin-right: 0.5rem; display:inline-block;" title="View PR on GitHub">${cleanName}: ${statusText}</a>`;
+                }).join('');
+
+                prStatusHtml = `
+                    <div style="margin-bottom: 1rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; border-left: 4px solid ${allMerged ? '#10b981' : '#f59e0b'};">
+                        <strong style="display:block; margin-bottom: 0.5rem;">Associated Pull Requests:</strong>
+                        <div>${prBadges}</div>
+                        ${allMerged ? '<div style="margin-top:0.5rem; color:#10b981; font-weight:bold;">✅ All Pull Requests Merged! Ready for deployment.</div>' : '<div style="margin-top:0.5rem; color:#64748b; font-size: 0.9em;">Waiting for PRs to be reviewed and merged.</div>'}
+                    </div>
+                 `;
+            }
+
             // Build agent status indicators
             const statuses = change.statuses || {};
             const details = change.details || {}; // Get detailed logs
@@ -268,6 +291,7 @@ async function fetchChanges() {
                     <div class="change-desc">
                         ${manifest.description || 'No description provided'}
                     </div>
+                    ${prStatusHtml}
                     <div class="agents-grid">
                         ${agentHtml}
                     </div>
@@ -321,9 +345,34 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-// REMOVED CONSTANT POLLING - User can manually refresh to see updates
-// This prevents constant DOM refreshes that make it hard to read and scroll
-// setInterval(fetchChanges, 3000);
+window.prStatuses = {};
+
+async function pollPrStatuses() {
+    const changesRes = await fetch(`${API_BASE}/changes`);
+    if (!changesRes.ok) return;
+    const data = await changesRes.json();
+
+    // For each change, poll its PR statuses
+    for (const changeId of Object.keys(data)) {
+        try {
+            const res = await fetch(`${API_BASE}/changes/${changeId}/pr_status`);
+            if (res.ok) {
+                const prData = await res.json();
+                if (prData.prs && Object.keys(prData.prs).length > 0) {
+                    window.prStatuses[changeId] = prData.prs;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to poll PR status for " + changeId, e);
+        }
+    }
+    // Refresh UI with new statuses
+    fetchChanges();
+}
+
+// Start PR polling every 10 seconds
+setInterval(pollPrStatuses, 10000);
+pollPrStatuses(); // initial fetch
 
 // Show notification helper
 function showNotification(message, type = 'info') {
@@ -331,7 +380,7 @@ function showNotification(message, type = 'info') {
     notification.className = `notification notification-${type}`;
     notification.textContent = message;
     document.body.appendChild(notification);
-    
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
         notification.style.opacity = '0';
