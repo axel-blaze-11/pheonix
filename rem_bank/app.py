@@ -23,7 +23,7 @@ werkzeug_logger = logging.getLogger('werkzeug')
 werkzeug_logger.setLevel(logging.INFO)
 
 # Minimum transaction amount (in rupees) enforced for all debit transactions
-MIN_TXN_AMOUNT = 5
+MIN_TXN_AMOUNT = 1
 # Supported UPI purpose codes. Extend as needed.
 PURPOSE_CODES = {
     "44": "Utility Payments",  # Added per change manifest
