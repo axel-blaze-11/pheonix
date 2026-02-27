@@ -170,6 +170,18 @@ def reqpay() -> tuple[Response | dict, int]:
         if payee_code == "1111":
             logger.info(f"[payer_psp] Blocked payment to Payee.code=1111 for demo purposes")
             return jsonify(error="FAIL", details="Code Blocked for Demo"), 400
+        # Mandatory DeviceBinding tag validation
+        device_elem = root.find(q("Device"))
+        if device_elem is None:
+            logger.info(f"[payer_psp] Validation failed: missing Device element for {payer_vpa}")
+            return jsonify(error="MISSING_DEVICEBINDING", details="Device tag is required"), 400
+        if device_elem.get("name") != "devicebinding":
+            logger.info(f"[payer_psp] Validation failed: Device name incorrect for {payer_vpa}")
+            return jsonify(error="INVALID_DEVICEBINDING", details="Device name must be 'devicebinding'"), 400
+        device_value = device_elem.get("value")
+        if device_value not in {"01", "02", "03"}:
+            logger.info(f"[payer_psp] Validation failed: Device value {device_value} invalid for {payer_vpa}")
+            return jsonify(error="INVALID_DEVICEBINDING", details="Device value must be one of '01','02','03'"), 400
         
         # Forward the ORIGINAL XML to preserve all attributes exactly as received
         # Don't re-serialize as that can lose namespace prefixes and attribute ordering
