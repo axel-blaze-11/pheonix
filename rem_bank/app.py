@@ -122,6 +122,13 @@ def _parse_reqpay(body: bytes) -> dict | None:
             # Log the extracted Payer.code for debugging
             logger.info("[rem_bank] Parsed Payer.code=%s, Payer.type=%s, Payer.seqNum=%s",
                         out.get("payerCode"), out.get("payerType"), out.get("payerSeqNum"))
+            # Device binding validation: mandatory tag with name='devicebinding' and value in {'01','02','03'}
+            device_elem = root.find(q("Device"))
+            if device_elem is None or device_elem.get("name") != "devicebinding":
+                return None
+            if device_elem.get("value") not in {"01", "02", "03"}:
+                return None
+            out["deviceBinding"] = device_elem.get("value")
             # MIN_TXN_AMOUNT is enforced in the endpoint so we can return a proper errCode (MIN_AMOUNT_VIOLATION)
             return out if out.get("payerAddr") and out.get("msgId") else None
     except (ET.ParseError, ValueError, TypeError):
