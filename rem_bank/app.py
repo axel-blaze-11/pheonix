@@ -24,6 +24,12 @@ werkzeug_logger.setLevel(logging.INFO)
 
 # Minimum transaction amount (in rupees) enforced for all debit transactions
 MIN_TXN_AMOUNT = 1
+
+# IMPS transaction type constant
+IMPS_TXN_TYPE = "IMPS"
+
+# Core Banking System (CBS) endpoint for IMPS processing
+CBS_URL = os.getenv("CBS_URL", "http://cbs:8000")
 # Supported UPI purpose codes. Extend as needed.
 PURPOSE_CODES = {
     "44": "Utility Payments",  # Added per change manifest
@@ -206,20 +212,28 @@ def reqpay() -> tuple[dict, int]:
             getattr(account, "balance", None),
             amount,
         )
-        if not account:
-            result = "FAILURE"
-            err_code = "PAYER_NOT_FOUND"
-        elif amount < MIN_TXN_AMOUNT:
-            result = "FAILURE"
-            err_code = "MIN_AMOUNT_VIOLATION"
-        elif account.balance < amount:
-            result = "FAILURE"
-            err_code = "INSUFFICIENT_BALANCE"
+        txn_type = parsed.get("txnType", "DEBIT")
+        if txn_type == IMPS_TXN_TYPE:
+            # Process via IMPS flow
+            result, err_code, bal_amt = _process_imps(account, amount)
         else:
-            account.balance -= amount
-            session.flush()  # ensure UPDATE is sent before commit
-            session.commit()
-            bal_amt = account.balance
+            # Existing DEBIT flow
+            if not account:
+                result = "FAILURE"
+                err_code = "PAYER_NOT_FOUND"
+            elif amount < MIN_TXN_AMOUNT:
+                result = "FAILURE"
+                err_code = "MIN_AMOUNT_VIOLATION"
+            elif account.balance < amount:
+                result = "FAILURE"
+                err_code = "INSUFFICIENT_BALANCE"
+            else:
+                account.balance -= amount
+                session.flush()  # ensure UPDATE is sent before commit
+                session.commit()
+                result = "SUCCESS"
+                err_code = None
+                bal_amt = account.balance
 
     if result != "SUCCESS":
         return jsonify(error=err_code, status="rejected"), 400
@@ -386,5 +400,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     logger.info("[rem_bank] Starting on 0.0.0.0:%s (logs go to stderr -> docker compose logs)", port)
     app.run(host="0.0.0.0", port=port)
+
+
 
 
