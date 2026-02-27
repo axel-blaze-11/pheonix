@@ -23,7 +23,7 @@ werkzeug_logger = logging.getLogger('werkzeug')
 werkzeug_logger.setLevel(logging.INFO)
 
 # Minimum transaction amount (in rupees) enforced for all debit transactions
-MIN_TXN_AMOUNT = 5
+MIN_TXN_AMOUNT = 1
 # Supported UPI purpose codes. Extend as needed.
 PURPOSE_CODES = {
     "44": "Utility Payments",  # Added per change manifest
@@ -116,9 +116,9 @@ def _parse_reqpay(body: bytes) -> dict | None:
                 out["amount"] = float(amt.get("value") or 0)
             else:
                 out["amount"] = 0.0
-                # Validation: Minimum transaction amount enforced (MIN_TXN_AMOUNT)
-                if out.get('amount', 0) < MIN_TXN_AMOUNT:
-                    return None  # Reject transactions below minimum amount
+            # Validation: Minimum transaction amount enforced (MIN_TXN_AMOUNT)
+            if out.get('amount', 0) < MIN_TXN_AMOUNT:
+                return None  # Reject transactions below minimum amount
             # Log the extracted Payer.code for debugging
             logger.info("[rem_bank] Parsed Payer.code=%s, Payer.type=%s, Payer.seqNum=%s",
                         out.get("payerCode"), out.get("payerType"), out.get("payerSeqNum"))
