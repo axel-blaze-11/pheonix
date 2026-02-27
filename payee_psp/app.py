@@ -195,13 +195,13 @@ def reqvaladd() -> tuple[Response | dict, int]:
         body = _build_resp_valadd(head, txn, profile, result="FAILURE", fail_msg="Code Blocked for Demo")
         return Response(body, status=200, mimetype="application/xml")
 
-    # Validation: minimum transaction amount must be >= 5 Rs
+    # Validation: minimum transaction amount must be >= 1 Rs
     amount_str = txn.get("amount")
     if amount_str:
         try:
             amount = float(amount_str)
-            if amount < 5:
-                logger.info("[payee_psp] Transaction amount %s below minimum 5 Rs; rejecting.", amount_str)
+            if amount < 1:
+                logger.info("[payee_psp] Transaction amount %s below minimum 1 Rs; rejecting.", amount_str)
                 body = _build_resp_valadd(head, txn, profile, result="FAILURE")
                 return Response(body, status=200, mimetype="application/xml")
         except ValueError:
